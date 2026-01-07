@@ -7,6 +7,7 @@ Automatically sync your X (Twitter) posts to Mastodon.
 
 ![Banner](./assets/banner.png)
 </div>
+
 ## ✨ Features
 
 - 🔄 **Auto sync** — New posts are automatically sent to Mastodon
