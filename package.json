@@ -1,0 +1,22 @@
+{
+  "name": "x-to-mastodon-bot",
+  "version": "1.0.0",
+  "description": "X (Twitter) to Mastodon sync bot",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start":  "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "lowdb": "^7.0.1",
+    "masto": "^6.7.0",
+    "p-retry": "^6.2.0",
+    "pino": "^8.17.2",
+    "pino-pretty": "^10.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
