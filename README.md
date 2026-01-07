@@ -1,5 +1,5 @@
 <div align="center">
-# 🔄 X to Mastodon Sync Bot
+<h1>🔄 X to Mastodon Sync Bot</h1>
 
 Automatically sync your X (Twitter) posts to Mastodon. 
 
