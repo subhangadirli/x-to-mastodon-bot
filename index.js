@@ -8,15 +8,15 @@ import pino from 'pino';
 import { existsSync, writeFileSync } from 'fs';
 
 // ═══════════════════════════════════════════════════════════════
-// 📋 KONFİQURASİYA
+// 📋 Configuration
 // ═══════════════════════════════════════════════════════════════
 
 const isCI = process.env. CI === 'true' || process.argv.includes('--once');
 
 const CONFIG = {
   feed: {
-    url: 'https://rss.app/feeds/v1.1/HoeTCauPEPrGkHB9.json',
-    checkInterval: 2 * 60 * 1000,
+    url: ['https://rss.app/feeds/v1.1/example.json', 'https://rss.app/feeds/v1.1/example2.json'],
+    checkInterval: 15 * 60 * 1000,
   },
   mastodon: {
     url: process. env.MASTODON_URL || 'https://mastodon.social',
@@ -51,9 +51,9 @@ const logger = pino({
   },
 });
 
-// ═══════════════════════════════════════════════���═══════════════
-// 💾 VERİTABANI
-// ═══════════════════════════════════════════════════════════════
+// ═════════════════════════════════════════════════════════════
+// 💾 Database 
+// ═════════════════════════════════════════════════════════════
 
 class SyncDatabase {
   constructor(filePath) {
@@ -62,7 +62,7 @@ class SyncDatabase {
   }
 
   async init() {
-    // Fayl yoxdursa yarat
+    // If no file then create
     if (!existsSync(this. filePath)) {
       writeFileSync(this.filePath, JSON.stringify({
         postedItems: [],
@@ -78,7 +78,7 @@ class SyncDatabase {
       stats:  { total: 0, failed: 0, mediaUploaded: 0 },
     });
     await this.db.read();
-    logger.info('💾 Veritabanı yükləndi');
+    logger.info('💾 DB Initialized');
   }
 
   async isPosted(itemId) {
@@ -111,33 +111,46 @@ class SyncDatabase {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🌐 JSON FEED İŞLƏYİCİ
+// 🌐 JSON Feed processor
 // ═══════════════════════════════════════════════════════════════
 
 class FeedProcessor {
-  constructor(feedUrl) {
-    this. feedUrl = feedUrl;
+  constructor(feedUrls) {
+    this.feedUrls = feedUrls;
   }
 
   async fetchFeed() {
-    logger.info(`📡 Feed yüklənir: ${this.feedUrl}`);
+    logger.info('Feed URLs: ', this.feedUrls);
+    const fetchPromises = this.feedUrls.map(url => {
+      logger.info(`📡 Fetching feed: ${url}`);
+      return this.processFeed(url).catch(error => {
+        logger.error(`Error processing feed from ${url}: ${error.message}`);
+        return null; // Handle feed processing errors gracefully
+      });
+    });
 
-    const response = await fetch(this.feedUrl, {
+    const results = await Promise.all(fetchPromises);
+    return results.filter(data => data !== null); // Filter out nulls
+  }
+
+  async processFeed(urlToProcess) {
+    const response = await fetch(urlToProcess, {
       method: 'GET',
       headers: {
         'Accept': 'application/json, application/feed+json, */*',
-        'User-Agent': 'Mozilla/5.0 (compatible; MastodonSyncBot/1.0)',
+        'User-Agent': 'Mozilla/4.0 (compatible; MastodonSyncBot/1.0)',
         'Cache-Control': 'no-cache',
       },
     });
 
-    if (!response. ok) {
-      throw new Error(`Feed yüklənmədi: ${response.status} ${response.statusText}`);
+    if (!response.ok) {
+      throw new Error(`Feed load error: ${response.status} ${response.statusText}`);
     }
 
     const data = await response.json();
-    logger.info(`✅ Feed yükləndi: ${data.title || 'Adsız feed'}`);
-    return data;
+    logger.info(`✅ Feed loaded: ${data.title || 'Unnamed feed'}`);
+    logger.info(`Returned elements: ${data.items.length}`)
+    return data; // Return the entire data object
   }
 
   extractMedia(item) {
@@ -212,20 +225,20 @@ class FeedProcessor {
     return createHash('sha256').update(identifier).digest('hex').slice(0, 16);
   }
 
-  parseItems(feed) {
-    if (!feed. items || ! Array.isArray(feed.items)) {
-      logger.warn('⚠️ Feed-də items tapılmadı');
+  parseItems(feedItems) {
+    if (!feedItems || !Array.isArray(feedItems)) {
+      logger.warn('⚠️ No items found in feed');
       return [];
     }
 
-    return feed.items.map(item => ({
+    return feedItems.map(item => ({
       id: this.generateItemId(item),
       title: item.title || '',
-      content: item.content_text || this.stripHtml(item. content_html) || '',
+      content: item.content_text || this.stripHtml(item.content_html) || '',
       url: item.url || item.external_url || '',
       media: this.extractMedia(item),
-      publishedAt: item. date_published ?  new Date(item. date_published) : new Date(),
-      author: item.authors?.[0]?.name || item.author?. name || feed.title || '',
+      publishedAt: item.date_published ? new Date(item.date_published) : new Date(),
+      author: item.authors?.[0]?.name || item.author?.name || feed.title || '',
     }));
   }
 
@@ -245,7 +258,7 @@ class FeedProcessor {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🐘 MASTODON KLİENT
+// 🐘 MASTODON Client connection
 // ═══════════════════════════════════════════════════════════════
 
 class MastodonClient {
@@ -262,7 +275,7 @@ class MastodonClient {
       logger.info(`🐘 Mastodon:  @${account.username}`);
       return account;
     } catch (error) {
-      throw new Error(`Mastodon təsdiqləmə uğursuz: ${error. message}`);
+      throw new Error(`Mastodon auth failure: ${error. message}`);
     }
   }
 
@@ -271,7 +284,7 @@ class MastodonClient {
     const timeout = setTimeout(() => controller.abort(), CONFIG.sync.mediaUploadTimeout);
 
     try {
-      logger. info(`📤 Media yüklənir... `);
+      logger. info(`📤 Loading Media... `);
 
       const response = await fetch(mediaItem.url, {
         signal: controller.signal,
@@ -279,7 +292,7 @@ class MastodonClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Media əldə edilmədi: ${response. status}`);
+        throw new Error(`Media load error: ${response. status}`);
       }
 
       const contentType = response.headers.get('content-type') || 'application/octet-stream';
@@ -287,7 +300,7 @@ class MastodonClient {
       const buffer = Buffer.from(arrayBuffer);
 
       if (buffer.length === 0) {
-        throw new Error('Media faylı boşdur');
+        throw new Error('No Media found');
       }
 
       const sizeMB = buffer.length / (1024 * 1024);
@@ -295,7 +308,7 @@ class MastodonClient {
 
       // Video ölçü limiti
       if (mediaItem.type === 'video' && sizeMB > 40) {
-        logger. warn(`⚠️ Video çox böyükdür (${sizeMB.toFixed(2)} MB), atlayırıq`);
+        logger. warn(`⚠️ Video is too large (${sizeMB.toFixed(2)} MB), skipping...`);
         return null;
       }
 
@@ -306,7 +319,7 @@ class MastodonClient {
         description:  mediaItem.description?. slice(0, 1500) || undefined,
       });
 
-      logger.info(`✅ Media yükləndi:  ${attachment.id}`);
+      logger.info(`✅ Media loaded:  ${attachment.id}`);
       return attachment;
     } catch (error) {
       if (error. name === 'AbortError') {
@@ -355,28 +368,28 @@ class MastodonClient {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🔄 SİNXRONİZATOR
+// 🔄 Sync
 // ═══════════════════════════════════════════════════════════════
 
 class Synchronizer {
   constructor() {
     this. db = new SyncDatabase(CONFIG.db.path);
-    this.feed = new FeedProcessor(CONFIG.feed. url);
+    this.feed = new FeedProcessor(CONFIG.feed.url);
     this.mastodon = new MastodonClient();
   }
 
   async init() {
-    logger.info('🚀 Bot başladılır.. .');
+    logger.info('🚀 Bot initializing.. .');
     await this.db.init();
     await this.mastodon.verifyCredentials();
-    logger.info('✅ Bot hazırdır! ');
+    logger.info('✅ Bot initialized! ');
   }
 
   async syncItem(item) {
     const mediaIds = [];
 
-    if (item.media. length > 0) {
-      logger.info(`📸 ${item.media.length} media tapıldı`);
+    if (item.media.length > 0) {
+      logger.info(`📸 ${item.media.length} media found`);
 
       for (const mediaItem of item.media) {
         try {
@@ -388,7 +401,7 @@ class Synchronizer {
             }
           }
         } catch (error) {
-          logger.error(`❌ Media xətası:  ${error.message}`);
+          logger.error(`❌ Media Error:  ${error.message}`);
         }
       }
     }
@@ -399,13 +412,12 @@ class Synchronizer {
   }
 
   async sync() {
-    logger.info('🔄 Sinxronizasiya başladı...');
+    logger.info('🔄 Beginning Sync...');
 
     try {
       const feedData = await this.feed.fetchFeed();
-      const items = this.feed.parseItems(feedData);
-
-      logger.info(`📰 ${items.length} element tapıldı`);
+      const items = feedData.flatMap(feed => this.feed.parseItems(feed.items)); // Merge all posts to one 
+      logger.info(`📰 ${items.length} elements found`);
 
       if (items.length === 0) return;
 
@@ -419,7 +431,7 @@ class Synchronizer {
         if (await this.db.isPosted(item.id)) continue;
 
         try {
-          logger.info(`📝 Yeni:  ${item.title?. slice(0, 50) || 'Başlıqsız'}...`);
+          logger.info(`📝 New:  ${item.title?. slice(0, 50) || 'Untitled'}...`);
           await this.syncItem(item);
           await this.db.markAsPosted(item.id);
           newPosts++;
@@ -431,22 +443,22 @@ class Synchronizer {
       }
 
       const stats = this.db.getStats();
-      logger.info(`📊 Yeni:  ${newPosts} | Ümumi: ${stats. total} | Uğursuz: ${stats.failed}`);
+      logger.info(`📊 New:  ${newPosts} | Total: ${stats.total} | Failed: ${stats.failed}`);
 
     } catch (error) {
-      logger. error(`❌ Sinxronizasiya xətası: ${error. message}`);
+      logger. error(`❌ Sync Error: ${error. message}`);
     }
   }
 
   start() {
     this.sync();
     setInterval(() => this.sync(), CONFIG.feed.checkInterval);
-    logger.info(`⏰ Dövri:  hər ${CONFIG.feed.checkInterval / 1000}s`);
+    logger.info(`⏰ Interval:  checking ${CONFIG.feed.checkInterval / 1000}s`);
   }
 }
 
 // ═══════════════════════════════════════════════════════════════
-// 🎯 ƏSAS PROQRAM
+// 🎯 SAS Config
 // ═══════════════════════════════════════════════════════════════
 
 async function main() {
@@ -460,21 +472,19 @@ async function main() {
     await sync.init();
 
     if (isCI) {
-      // GitHub Actions:  bir dəfə işlə və çıx
       await sync.sync();
-      logger.info('✅ CI sync tamamlandı');
+      logger.info('✅ CI sync Completed');
       process.exit(0);
     } else {
-      // Lokal: davamlı işlə
       sync.start();
 
       process.on('SIGINT', () => {
-        logger.info('\n👋 Bot dayandırılır.. .');
+        logger.info('\n👋 Bot Closing.. .');
         process.exit(0);
       });
     }
   } catch (error) {
-    logger.error(`❌ Kritik xəta: ${error.message}`);
+    logger.error(`❌ Critical Error: ${error.message}`);
     process.exit(1);
   }
 }
