@@ -1,244 +1,146 @@
-<div align="center">
-<h1>🔄 X to Mastodon Sync Bot</h1>
+# X to Mastodon Sync Bot
 
-Automatically sync your X (Twitter) posts to Mastodon. 
-
-[![Node.js](https://img.shields.io/badge/Node.js-18+-green?style=flat-square&logo=node.js)](https://nodejs.org/) [![Mastodon](https://img.shields.io/badge/Mastodon-API%20v2-6364FF?style=flat-square&logo=mastodon)](https://joinmastodon.org/) [![License](https://img.shields.io/badge/License-GPL--3.0-blue?style=flat-square)](LICENSE) [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-brightgreen.svg?style=flat-square)](https://github.com/USERNAME/x-to-mastodon-bot/graphs/commit-activity)
+Mirror posts from one or more [JSON Feeds](https://www.jsonfeed.org/) to Mastodon, including images and videos. An X-to-JSON-Feed service such as [RSS.app](https://rss.app) supplies the source; this bot does not use the X API directly or parse XML RSS.
 
 ![Banner](./assets/banner.png)
 
-<div align="center" style="margin: 20px 0;">
-  <a href="https://mastodon.social/@subhanqedirli" target="_blank" style="text-decoration: none;">
-    <button style="
-      background-color: #6364FF; 
-      color: white; 
-      border: none; 
-      border-radius: 8px; 
-      padding: 10px 20px; 
-      font-size: 16px; 
-      font-weight: bold; 
-      cursor: pointer;
-      transition: 0.3s;
-    " 
-    onmouseover="this.style.backgroundColor='#4B50E6'" 
-    onmouseout="this.style.backgroundColor='#6364FF'">
-      🐘 Follow me on Mastodon
-    </button>
-  </a>
-</div>
+## Features
 
-</div>
+- Strict TypeScript with runtime validation of configuration, feeds, and saved state.
+- Multiple feeds, duplicate filtering, and oldest-first processing of unseen posts.
+- Images and videos from JSON Feed attachments, images, and embedded HTML, with available alt text.
+- Timeouts, bounded downloads, and exponential retries for transient network/API failures.
+- Persistent item history, atomic state writes, and Mastodon idempotency keys on status requests.
+- One-shot or continuous operation, graceful shutdown, structured JSON logs, and sync statistics.
+- Automated tests, coverage thresholds, linting, formatting, CI, and dependency updates.
 
-## ✨ Features
+## Quick start
 
-- 🔄 **Auto sync** — New posts are automatically sent to Mastodon
-- 🖼️ **Image support** — JPG, PNG, GIF, WebP, AVIF
-- 🎬 **Video support** — MP4, WebM, MOV (up to 40MB)
-- 🛡️ **Duplicate protection** — Same post is never shared twice
-- ♻️ **Retry mechanism** — Failed operations are automatically retried
-- 📊 **Statistics** — Track total posts, failures, and media uploads
-- ⚡ **GitHub Actions** — Run for free without a server
+Requires **Node.js 24+** (24 LTS recommended) and **pnpm 10**. The exact pnpm version is pinned in `package.json`; use Corepack if available or [install pnpm](https://pnpm.io/installation).
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- Mastodon account with API token
-- RSS. app account (for X feed)
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/USERNAME/x-to-mastodon-bot.git
+```sh
+git clone https://github.com/subhangadirli/x-to-mastodon-bot.git
 cd x-to-mastodon-bot
+pnpm install --frozen-lockfile
+cp .env.example .env
 ```
 
-### 2. Install dependencies
+Edit `.env`:
 
-```bash
-npm install
-```
-
-### 3. Configure environment
-
-Copy `.env.example` to `.env`:
-
-```bash
-cp .env.example . env
-```
-
-Edit `.env` file: 
-
-```env
+```dotenv
+FEED_URLS=https://rss.app/feeds/v1.1/your-feed.json
 MASTODON_URL=https://mastodon.social
-MASTODON_ACCESS_TOKEN=your_access_token_here
+MASTODON_ACCESS_TOKEN=your_token_here
 ```
 
-### 4. Get Mastodon Token
+For multiple feeds, separate URLs with commas. In Mastodon, create an application under **Preferences → Development → New application**. Grant `read:accounts`, `write:statuses`, and `write:media`, then copy its access token. Never commit `.env` or tokens.
 
-1. Log in to your Mastodon account
-2. Go to **Preferences** → **Development** → **New Application**
-3. Enter a name (e.g., "X Sync Bot")
-4. Select scopes: `read` and `write`
-5. Click **Submit** → Copy the **Access Token**
-
-### 5. Set Up RSS Feed
-
-1. Go to [RSS.app](https://rss.app)
-2. Paste your X (Twitter) profile URL
-3. Copy the JSON feed link
-4. Update `CONFIG.feed.url` in `index.js`
-
-## 💻 Usage
-
-### Run Locally
-
-```bash
-# Start the bot (continuous)
-npm start
-
-# Development mode (auto-reload)
-npm run dev
-
-# One-time sync
-node index.js --once
+```sh
+pnpm build
+pnpm start --once  # One sync, then exit
+pnpm start         # Continuous polling
 ```
 
-### Example Output
+**The first run publishes the oldest available posts**, up to five per check by default. Review your feed before starting: subsequent runs drain the remaining backlog. Publication is real; there is no dry-run mode.
 
-```
-═══════════════════════════════════
-   X → MASTODON SYNC BOT
-═══════════════════════════════════
-[INFO] 🚀 Starting bot...
-[INFO] 💾 Database loaded
-[INFO] 🐘 Mastodon:  @username
-[INFO] ✅ Bot ready! 
-[INFO] 🔄 Sync started...
-[INFO] 📡 Fetching feed...
-[INFO] ✅ Feed loaded:  X Feed
-[INFO] 📰 Found 5 items
-[INFO] 📝 New:  This is a test post... 
-[INFO] 📸 Found 1 media
-[INFO] 📦 Media:  0. 45 MB
-[INFO] ✅ Media uploaded:  123456789
-[INFO] ✅ Post:  https://mastodon.social/@user/987654321
-[INFO] 📊 New: 1 | Total: 1 | Failed: 0
-```
+## Configuration
 
-## ☁️ Deploy with GitHub Actions
+All settings are environment variables. `.env` is loaded automatically without overriding existing environment values. Invalid settings fail before network requests.
 
-### 1. Add Secrets
+| Variable                | Default                   | Purpose                                                          |
+| ----------------------- | ------------------------- | ---------------------------------------------------------------- |
+| `FEED_URLS`             | Required                  | Comma- or whitespace-separated HTTP(S) JSON Feed URLs            |
+| `MASTODON_ACCESS_TOKEN` | Required                  | Mastodon application token                                       |
+| `MASTODON_URL`          | `https://mastodon.social` | Mastodon instance URL                                            |
+| `MASTODON_VISIBILITY`   | `public`                  | `public`, `unlisted`, `private`, or `direct`                     |
+| `CHECK_INTERVAL_MS`     | `900000`                  | Delay between completed syncs (15 minutes)                       |
+| `MAX_POSTS_PER_CHECK`   | `5`                       | Maximum unseen items attempted per sync                          |
+| `MAX_STATUS_LENGTH`     | `500`                     | Conservative status limit, counted in Unicode code points        |
+| `MAX_MEDIA_ATTACHMENTS` | `4`                       | Attachment limit; `0` disables media                             |
+| `REQUEST_TIMEOUT_MS`    | `30000`                   | Feed and individual Mastodon request timeout                     |
+| `MEDIA_TIMEOUT_MS`      | `60000`                   | Media download / server-side processing timeout                  |
+| `MAX_MEDIA_BYTES`       | `41943040`                | Maximum download size per attachment (40 MiB)                    |
+| `MAX_FEED_BYTES`        | `5242880`                 | Maximum feed download size (5 MiB)                               |
+| `RETRY_ATTEMPTS`        | `3`                       | Additional attempts for transient failures; `0` disables retries |
+| `POST_DELAY_MS`         | `3000`                    | Delay between successful posts                                   |
+| `STATE_PATH`            | `./sync_state.json`       | Persistent JSON state file                                       |
+| `LOG_LEVEL`             | `info`                    | Pino level, including `debug` and `silent`                       |
 
-Go to your repository:  **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
+`--once` or `CI=true` selects one-shot operation. A feed or status failure gives one-shot runs a nonzero exit code, after saving any successful work. A failed attachment is logged and the status is still attempted with remaining media. Authentication and state persistence failures stop the bot.
 
-| Name | Value |
-|------|-------|
-| `MASTODON_URL` | `https://mastodon.social` |
-| `MASTODON_ACCESS_TOKEN` | Your token |
+Status text uses the title, falling back to plain text or decoded HTML. The source link is appended when it fits; text is truncated without splitting Unicode surrogate pairs. Instance limits and accepted media formats vary: adjust limits for your server. Invalid publication dates sort before dated items.
 
-### 2.  Automatic Sync
+### State and duplicate protection
 
-The workflow runs automatically: 
+Keep `sync_state.json` on persistent storage and **run only one bot process per state file/account**. In-process calls cannot overlap, but separate processes are not coordinated. Item IDs are retained indefinitely to avoid reposting old feed entries; state grows with the number of posts. Counters track successful statuses, failed status attempts, and attachments included in successful statuses.
 
-- ⏰ Every 5 minutes (scheduled)
-- 🔘 Manual:  **Actions** → **X to Mastodon Sync** → **Run workflow**
+The existing state format and item-ID hashing remain compatible with the JavaScript version. Back up the state before upgrading. Corrupt state is never silently reset. Deleting state can replay your feed. Mastodon idempotency keys reduce duplicates after ambiguous API failures but have server-defined retention; they are not an exactly-once guarantee after a crash or state loss.
 
-## 📁 Project Structure
+Only use trusted feed providers and media sources: the bot fetches URLs supplied by feeds, including redirects. Do not expose it as a service that accepts arbitrary feed URLs.
 
-```
-x-to-mastodon-bot/
-├── . github/
-│   └── workflows/
-│       └── sync. yml          # GitHub Actions workflow
-├── index.js                   # Main bot code
-├── package. json               # NPM configuration
-├── sync_state.json            # Sync state (auto-generated)
-├── .env                       # Secret config (don't commit!)
-├── .env.example               # Example config
-├── . gitignore                 # Git ignore rules
-└── README.md                  # This file
-```
+## GitHub Actions deployment
 
-## ⚙️ Configuration
+Add repository **Actions secrets**:
 
-Customize the `CONFIG` object in `index.js`:
+- `FEED_URLS`
+- `MASTODON_URL` (set it explicitly, e.g. `https://mastodon.social`)
+- `MASTODON_ACCESS_TOKEN`
 
-```javascript
-const CONFIG = {
-  feed: {
-    url: 'https://rss.app/feeds/v1.1/XXXXX.json',  // RSS feed URL
-    checkInterval:  2 * 60 * 1000,                   // Check interval (ms)
-  },
-  mastodon: {
-    url: process.env. MASTODON_URL,                  // Mastodon instance
-    accessToken: process.env. MASTODON_ACCESS_TOKEN, // API token
-    visibility:  'public',                            // public/unlisted/private/direct
-    maxStatusLength: 500,                            // Max text length
-    maxMediaAttachments: 4,                          // Max media per post
-  },
-  sync: {
-    maxPostsPerCheck: 5,                             // Max posts per check
-    historySize: 100,                                // Posts to remember
-    retryAttempts: 3,                                // Retry count
-    mediaUploadTimeout: 60000,                       // Media timeout (ms)
-  },
-};
+Enable workflows, then use **Actions → X to Mastodon Sync → Run workflow** on the default branch. Scheduled runs are requested every five minutes; GitHub may delay or skip them. Scheduled workflows in forks may need enabling, and inactive repositories may have schedules disabled by GitHub.
+
+The workflow serializes runs and restores the latest saved state, then saves with a **new cache key** even after a partial failure. It also attempts to restore the legacy `sync-state` cache when upgrading. The sync job only runs from the default branch to prevent branch-specific state from replaying posts.
+
+**Actions caches are best-effort, not durable storage.** Cache eviction or an interrupted run before saving state can cause reposts. Back up state regularly; for reliable long-term deployment, run on a host with a persistent state volume rather than relying on Actions caches. Do not run local and Actions deployments against the same account independently.
+
+## Development
+
+```sh
+pnpm dev             # Watch TypeScript sources
+pnpm typecheck       # Strict compiler checks
+pnpm lint            # Type-aware ESLint
+pnpm format          # Apply Prettier formatting
+pnpm test            # Tests (mocked APIs / local fixtures; no live account needed)
+pnpm test:coverage   # V8 coverage with enforced thresholds
+pnpm check           # All checks, coverage, and production build
+pnpm audit --prod    # Production dependency advisory check
 ```
 
-## 🔧 Commands
+CI runs the full checks on Node.js 24 and 26. Dependabot proposes weekly package and pinned GitHub Actions updates. TypeScript stays on the newest release supported by the type-aware ESLint parser rather than accepting incompatible compiler upgrades.
 
-| Command | Description |
-|---------|-------------|
-| `npm start` | Start the bot (continuous) |
-| `npm run dev` | Development mode |
-| `node index.js --once` | One-time sync |
+```text
+src/
+  config.ts        Validated environment configuration
+  database.ts      Atomic persistent state and statistics
+  feed.ts          JSON Feed fetching, parsing, HTML, and media
+  http.ts          Bounded response reading and retry policy
+  index.ts         CLI entry point and shutdown handling
+  mastodon.ts      Status formatting and Mastodon API integration
+  synchronizer.ts  Deduplication, ordering, and polling
+  types.ts         Shared application interfaces
+tests/             Unit, regression, and CLI tests
+```
 
-## 📋 Mastodon Limits
+### Upgrading from the JavaScript version
 
-| Parameter | Limit |
-|-----------|-------|
-| Max video size | 40 MB |
-| Video formats | MP4, WebM, MOV |
-| Image formats | JPG, PNG, GIF, WebP, AVIF |
-| Max media per post | 4 |
+1. Back up `sync_state.json` and stop the old process.
+2. Install Node.js 24+ and run `pnpm install --frozen-lockfile`.
+3. Move hardcoded `CONFIG.feed.url` values into `FEED_URLS` in `.env` (or Actions secrets).
+4. Run `pnpm check`, then use `pnpm start --once` instead of `node index.js --once`.
+5. Keep using the same state path; do not delete the state file.
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
-### Feed not loading (404)
+- **Invalid configuration:** check the named variables against `.env.example`; feed URLs must be HTTP(S).
+- **Feed failures:** open the JSON feed privately and confirm an `items` array exists. XML RSS is not supported. Check provider availability and download limits.
+- **Authentication failure:** verify the instance URL, token, and scopes above.
+- **Missing attachments:** check content types, file sizes, and your Mastodon instance limits. Audio and non-media attachments are ignored.
+- **State failure:** check permissions, disk space, and state validity. Restore a backup rather than deleting state.
+- **Repeated posts:** verify persistent state is being restored and that no second deployment is running.
 
-- Verify the feed is active on RSS.app
-- Check if the URL is correct
+Logs intentionally omit raw request URLs, credentials, and upstream error bodies because RSS URLs can contain private keys.
 
-### Mastodon error (401)
+## License
 
-- Verify your access token is correct
-- Ensure the token has `read` and `write` permissions
+[GPL-3.0-only](LICENSE).
 
-### Media not uploading
-
-- Check file size (40MB limit for videos)
-- Ensure media URL points directly to the file
-
-### GitHub Actions not running
-
-- Verify secrets are correctly added
-- Check error messages in the Actions tab
-
-## 📜 License
-
-GPL v3 — feel free to use however you like!
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create your branch (`git checkout -b feature/new-feature`)
-3. Commit changes (`git commit -m 'Add new feature'`)
-4. Push to branch (`git push origin feature/new-feature`)
-5. Open a Pull Request
-
-
----
-
-⭐ If you like this project, don't forget to give it a star! 
+[Follow the maintainer on Mastodon](https://mastodon.social/@subhanqedirli).
